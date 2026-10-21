@@ -2,8 +2,10 @@
 # Settings here override the Netlify UI. Leave "Base directory" empty in the UI.
 
 [build]
-  # Netlify installs dependencies (npm ci, incl. devDependencies) before this runs.
-  command = "npm run build"
+  # Install every workspace first: when the site's "Package directory" is set to
+  # "client", Netlify only installs the client workspace, so the server build
+  # (and the API function's external modules) would be missing their dependencies.
+  command = "npm install --include=dev --workspaces --include-workspace-root --no-audit --no-fund && npm run build"
   publish = "client/dist"
 
 [build.environment]
