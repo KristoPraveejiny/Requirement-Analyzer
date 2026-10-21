@@ -1,0 +1,34 @@
+# Netlify: React client (static) + Express API (Netlify Function) on the same site.
+# Settings here override the Netlify UI. Leave "Base directory" empty in the UI.
+
+[build]
+  # Netlify installs dependencies (npm ci, incl. devDependencies) before this runs.
+  command = "npm run build"
+  publish = "client/dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Every server runtime dependency ships as real node_modules instead of being
+  # bundled: several are CommonJS with dynamic require() (fails in an ESM bundle)
+  # and pdf.js (via unpdf) loads files at runtime. Keep this list in sync with
+  # server/package.json "dependencies".
+  external_node_modules = [
+    "cheerio", "docx", "express", "express-rate-limit", "helmet",
+    "mammoth", "multer", "undici", "unpdf", "zod",
+  ]
+
+# Order matters: API first, then the single-page-app fallback.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

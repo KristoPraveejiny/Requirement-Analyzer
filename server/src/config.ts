@@ -12,6 +12,10 @@ const schema = z.object({
   MAX_UPLOAD_MB: z.coerce.number().positive().max(25).default(5),
   MAX_PAGES: z.coerce.number().int().min(1).max(20).default(8),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(10),
+  // Per-page website fetch timeout and AI request timeout. Lower them on platforms
+  // with a hard request limit (e.g. Netlify Functions: 60 s in total).
+  FETCH_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+  LLM_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(180_000),
   // Express "trust proxy" setting: "false", a hop count, or a comma-separated list of subnets.
   TRUST_PROXY: z
     .string()

@@ -31,13 +31,17 @@ export function createApp({ config, fetchPage, generateDraft, now }: AppDeps) {
   const generator =
     generateDraft ??
     (config.OPENROUTER_API_KEY
-      ? createOpenRouterGenerator({ apiKey: config.OPENROUTER_API_KEY, model: config.OPENROUTER_MODEL })
+      ? createOpenRouterGenerator({
+          apiKey: config.OPENROUTER_API_KEY,
+          model: config.OPENROUTER_MODEL,
+          timeoutMs: config.LLM_TIMEOUT_MS,
+        })
       : mockGenerator);
 
   app.use(
     "/api",
     express.json({ limit: "1mb" }),
-    createApiRouter({ config, fetchPage: fetchPage ?? createSafeFetcher(), generateDraft: generator, mock, now }),
+    createApiRouter({ config, fetchPage: fetchPage ?? createSafeFetcher({ timeoutMs: config.FETCH_TIMEOUT_MS }), generateDraft: generator, mock, now }),
     apiNotFound,
   );
 

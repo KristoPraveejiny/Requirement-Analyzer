@@ -42,6 +42,8 @@ See [.env.example](.env.example). All secrets stay on the server. The browser ne
 | `MAX_PAGES` | `8` | Max website pages analysed (homepage + most relevant links) |
 | `RATE_LIMIT_PER_MIN` | `10` | `/api/generate` requests per minute per IP |
 | `TRUST_PROXY` | `false` | Set (e.g. `1`) behind a reverse proxy so rate limiting sees real client IPs |
+| `FETCH_TIMEOUT_MS` | `10000` | Per-page website fetch timeout |
+| `LLM_TIMEOUT_MS` | `180000` | AI request timeout |
 | `STATIC_DIR` | `client/dist` | Location of the built client |
 
 ## Usage
@@ -147,6 +149,25 @@ docker run -p 8787:8787 -e OPENROUTER_API_KEY=... -e TRUST_PROXY=1 voice-agent-r
 **Render / Railway / Fly.io:**
 - Build command: `npm ci && npm run build`. Start command: `npm start`.
 - Add `OPENROUTER_API_KEY` as a secret, and set `TRUST_PROXY=1`. These platforms provide `PORT`.
+
+**Netlify (static client + API as a Netlify Function on the same site):**
+
+Already configured in [netlify.toml](netlify.toml) and [netlify/functions/api.mts](netlify/functions/api.mts).
+- The adapter starts the existing Express app inside the function and forwards `/api/*` to it, so every route, upload check, SSRF guard and error handler is reused unchanged.
+- The client keeps calling relative `/api/...` URLs.
+
+Netlify settings:
+- Leave **Base directory** empty. `netlify.toml` sets the build command (`npm run build`), the publish directory (`client/dist`) and the functions directory.
+- **Environment variables** (Site configuration → Environment variables, with scope including *Functions*):
+  - `OPENROUTER_API_KEY` (required)
+  - `OPENROUTER_MODEL`
+
+Netlify limits that apply ([docs](https://docs.netlify.com/build/functions/configuration/)):
+- **60 s run time per request, not configurable.** The adapter defaults to `FETCH_TIMEOUT_MS=6000`, `MAX_PAGES=5` and `LLM_TIMEOUT_MS=38000`, so a slow generation ends with a clear "AI service took too long" error instead of a platform timeout.
+  - Generation only succeeds if the model answers within about 38 s. The free MiniMax model took about 130 s in testing, so **use a faster model on Netlify**, or host the API elsewhere (Render or Docker; see above).
+- **6 MB request body,** with uploads Base64-encoded. The adapter defaults to `MAX_UPLOAD_MB=4`, and the UI reads this limit from `/api/health`.
+- **Rate limiting is per function instance,** in memory, so it is weaker than on a single server.
+- Any of these defaults can be overridden with site environment variables.
 
 **Production checklist:**
 - HTTPS only.

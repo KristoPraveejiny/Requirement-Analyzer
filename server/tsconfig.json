@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": [
+      "ES2023"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
@@ -9,9 +11,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"],
-    "outDir": "dist",
-    "rootDir": "."
+    "types": [
+      "node"
+    ],
+    "outDir": "dist"
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test",
+    "../netlify/functions"
+  ]
 }
