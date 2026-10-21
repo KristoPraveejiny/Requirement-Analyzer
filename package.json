@@ -1,0 +1,28 @@
+{
+  "name": "voice-agent-requirements-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generate client-specific voice-agent / voicemail requirements documents from a website URL.",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "test": "npm run test -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "mammoth": {
+      "argparse": "^2.0.1"
+    }
+  }
+}
