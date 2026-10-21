@@ -163,8 +163,8 @@ Netlify settings:
   - `OPENROUTER_MODEL`
 
 Netlify limits that apply ([docs](https://docs.netlify.com/build/functions/configuration/)):
-- **60 s run time per request, not configurable.** The adapter defaults to `FETCH_TIMEOUT_MS=6000`, `MAX_PAGES=5` and `LLM_TIMEOUT_MS=38000`, so a slow generation ends with a clear "AI service took too long" error instead of a platform timeout.
-  - Generation only succeeds if the model answers within about 38 s. The free MiniMax model took about 130 s in testing, so **use a faster model on Netlify**, or host the API elsewhere (Render or Docker; see above).
+- **~26 s per request in practice.** Functions may run for 60 s, but Netlify's proxy returns a bare `HTTP 504` to the browser after about 26 s (10 s on some plans). The adapter defaults to `FETCH_TIMEOUT_MS=4000`, `MAX_PAGES=3` and `LLM_TIMEOUT_MS=16000` (one deadline shared with the JSON retry), so a slow generation ends with a clear "AI service took too long" error instead of a platform timeout.
+  - Generation only succeeds if the model answers within about 16 s. The free MiniMax model took about 130 s in testing, so **use a faster model on Netlify**, or host the API elsewhere (Render or Docker; see above).
 - **6 MB request body,** with uploads Base64-encoded. The adapter defaults to `MAX_UPLOAD_MB=4`, and the UI reads this limit from `/api/health`.
 - **Rate limiting is per function instance,** in memory, so it is weaker than on a single server.
 - Any of these defaults can be overridden with site environment variables.

@@ -15,15 +15,16 @@ interface NetlifyContext {
   ip?: string;
 }
 
-// Defaults sized for Netlify's limits: 60 s synchronous run time and a 6 MB
-// buffered request (Base64-encoded uploads ≈ 4.5 MB of file). Site environment
-// variables override them. Worst case: 6 s homepage + 2 batches × 6 s pages
-// + 38 s AI ≈ 56 s.
+// Defaults sized for Netlify's limits: although synchronous functions may run 60 s,
+// Netlify's proxy returns a 504 to the browser after ~26 s (10 s on some plans).
+// Requests are buffered up to 6 MB (Base64-encoded uploads ≈ 4.5 MB of file).
+// Site environment variables override them. Worst case: 4 s homepage + 1 batch
+// × 4 s pages + 16 s AI (including any JSON retry) ≈ 24 s.
 const NETLIFY_DEFAULTS = {
   MAX_UPLOAD_MB: "4",
-  MAX_PAGES: "5",
-  FETCH_TIMEOUT_MS: "6000",
-  LLM_TIMEOUT_MS: "38000",
+  MAX_PAGES: "3",
+  FETCH_TIMEOUT_MS: "4000",
+  LLM_TIMEOUT_MS: "16000",
 };
 
 // Headers that must not be forwarded as-is to the loopback server.

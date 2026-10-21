@@ -21,8 +21,13 @@ export interface OpenRouterOptions {
 export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGenerator {
   const { apiKey, model, timeoutMs = 180_000, maxTokens = 16_000, fetchImpl = fetch } = options;
 
-  async function complete(messages: ChatMessage[]): Promise<string> {
+  async function complete(messages: ChatMessage[], deadline: number): Promise<string> {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs < 1_000) {
+      throw new AppError("LLM_TIMEOUT", "The AI service took too long to respond. Please try again.", 504);
+    }
     let res: Response;
+    let text: string;
     try {
       res = await fetchImpl(ENDPOINT, {
         method: "POST",
@@ -40,8 +45,10 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
           // return no content. Ignored by models without reasoning support.
           reasoning: { effort: "low", exclude: true },
         }),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(remainingMs),
       });
+      // The deadline also covers reading the body, which is where most of the wait is.
+      text = await res.text();
     } catch (err) {
       const name = (err as { name?: string })?.name;
       if (name === "TimeoutError" || name === "AbortError") {
@@ -50,7 +57,7 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
       throw new AppError("LLM_FAILED", "Could not reach the AI service.", 502);
     }
 
-    const body = (await res.json().catch(() => null)) as {
+    const body = parseJson(text) as {
       choices?: { message?: { content?: string }; finish_reason?: string }[];
       error?: { message?: string };
     } | null;
@@ -58,6 +65,15 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
     if (!res.ok || body?.error) {
       // Provider messages are logged server-side only; callers get a generic message.
       console.error("OpenRouter error", res.status, body?.error?.message);
+      if (res.status === 401 || res.status === 403) {
+        // Key shape only, never its value: helps spot a pasted "Bearer " prefix or quotes.
+        console.error("OpenRouter key check", {
+          length: apiKey.length,
+          openRouterPrefix: apiKey.startsWith("sk-or-"),
+          hasQuotes: /["']/.test(apiKey),
+          hasWhitespace: /\s/.test(apiKey),
+        });
+      }
       throw mapStatus(res.status);
     }
 
@@ -81,7 +97,9 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
       { role: "system", content: MASTER_PROMPT },
       { role: "user", content: buildUserMessage(input) },
     ];
-    const first = await complete(messages);
+    // One deadline for the whole generation, so a JSON retry can't double the wait.
+    const deadline = Date.now() + timeoutMs;
+    const first = await complete(messages, deadline);
     try {
       return parseDraft(first);
     } catch (err) {
@@ -93,7 +111,7 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
           role: "user",
           content: `Your reply could not be used (${reason.slice(0, 300)}). Reply again with ONLY the corrected JSON object in the required shape.`,
         },
-      ]);
+      ], deadline);
       try {
         return parseDraft(retry);
       } catch {
@@ -115,6 +133,14 @@ export function parseDraft(content: string): LlmDraft {
     throw new Error(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
   return parsed.data;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 function mapStatus(status: number): AppError {

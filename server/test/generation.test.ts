@@ -135,6 +135,21 @@ describe("createOpenRouterGenerator", () => {
     const gen = createOpenRouterGenerator({ apiKey: "k", model: "m", fetchImpl });
     await expect(gen(input)).rejects.toMatchObject({ code: "LLM_TIMEOUT" });
   });
+
+  it("shares one deadline between the first call and the JSON retry", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fetchImpl = vi.fn(async () => {
+        vi.setSystemTime(Date.now() + 9_500); // the first reply uses up most of the budget
+        return new Response(JSON.stringify(reply("not json").body));
+      });
+      const gen = createOpenRouterGenerator({ apiKey: "k", model: "m", timeoutMs: 10_000, fetchImpl });
+      await expect(gen(input)).rejects.toMatchObject({ code: "LLM_TIMEOUT" });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("assembleDocument", () => {
