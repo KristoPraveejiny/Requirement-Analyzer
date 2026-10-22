@@ -19,13 +19,35 @@ interface NetlifyContext {
 // Netlify's proxy returns a 504 to the browser after ~26 s (10 s on some plans).
 // Requests are buffered up to 6 MB (Base64-encoded uploads ≈ 4.5 MB of file).
 // Site environment variables override them. Worst case: 4 s homepage + 1 batch
-// × 4 s pages + 16 s AI (including any JSON retry) ≈ 24 s.
+// × 4 s pages + 16 s AI (including any JSON retry) ≈ 24 s. REQUEST_TIMEOUT_MS also
+// caps the total, so slow upload parsing or crawling shortens the AI budget instead
+// of pushing the request past the gateway and into a bare 504.
 const NETLIFY_DEFAULTS = {
   MAX_UPLOAD_MB: "4",
   MAX_PAGES: "3",
   FETCH_TIMEOUT_MS: "4000",
   LLM_TIMEOUT_MS: "16000",
+  REQUEST_TIMEOUT_MS: "24000",
 };
+
+// Site variables may lower these but never raise them past the gateway budget,
+// e.g. values copied from .env.example (MAX_PAGES=8, LLM_TIMEOUT_MS=180000).
+const NETLIFY_MAX: Record<keyof typeof NETLIFY_DEFAULTS, number> = {
+  MAX_UPLOAD_MB: 4,
+  MAX_PAGES: 3,
+  FETCH_TIMEOUT_MS: 4000,
+  LLM_TIMEOUT_MS: 16000,
+  REQUEST_TIMEOUT_MS: 24000,
+};
+
+export function netlifyEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const out = { ...NETLIFY_DEFAULTS, ...env };
+  for (const [key, max] of Object.entries(NETLIFY_MAX) as [keyof typeof NETLIFY_MAX, number][]) {
+    const value = Number(out[key]);
+    out[key] = String(Number.isFinite(value) && value > 0 ? Math.min(value, max) : max);
+  }
+  return out;
+}
 
 // Headers that must not be forwarded as-is to the loopback server.
 const DROP_REQUEST_HEADERS = [
@@ -39,8 +61,7 @@ let origin: Promise<string> | undefined;
 function startServer(): Promise<string> {
   origin ??= new Promise<string>((resolve, reject) => {
     const config = loadConfig({
-      ...NETLIFY_DEFAULTS,
-      ...process.env,
+      ...netlifyEnv(process.env),
       // Only this adapter talks to the server, and it sets X-Forwarded-For itself.
       TRUST_PROXY: "loopback",
     });

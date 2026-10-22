@@ -4,7 +4,7 @@ const TBC = (what: string) => `[TO CONFIRM: ${what}]`;
 const YNO = "Answers: Yes / No / Other";
 
 /**
- * Offline generator used when no OPENROUTER_API_KEY is set. Produces a clearly
+ * Offline generator used when no GEMINI_API_KEY is set. Produces a clearly
  * labelled English skeleton from the crawled pages so the full UI/export flow can be tested.
  */
 export const mockGenerator: DraftGenerator = async ({ mode, websiteUrl, pages, languageAlt }) => {
@@ -41,7 +41,7 @@ export const mockGenerator: DraftGenerator = async ({ mode, websiteUrl, pages, l
     title: `${clientName} ${mode === "voicemail" ? "Voicemail" : "Voice Agent"} Script`,
     language: "English",
     routingLabel: "Routing",
-    contextLine: `MOCK MODE — no AI model was called (OPENROUTER_API_KEY is not set) · [BRAND]: ${clientName} · [FIRST_NAME]: agent name`,
+    contextLine: `MOCK MODE — no AI model was called (GEMINI_API_KEY is not set) · [BRAND]: ${clientName} · [FIRST_NAME]: agent name`,
     instructions: "Not spoken: ask one question at a time. Do not read answer labels or routing notes.",
     instructionsAlt: bi("Not spoken: ask one question at a time."),
     sections: Object.fromEntries(
@@ -62,7 +62,7 @@ export const mockGenerator: DraftGenerator = async ({ mode, websiteUrl, pages, l
       { item: "Opening hours", whyNeeded: "Out-of-hours handling", section: "exits" },
       { item: "Callback rules and timeframe", whyNeeded: "Closing clips", section: "closing" },
     ],
-    assumptions: ["Mock output — replace by configuring OPENROUTER_API_KEY."],
+    assumptions: ["Mock output — replace by configuring GEMINI_API_KEY."],
     sourcesUsed: pages.map((p) => p.url),
   };
   return draft;

@@ -170,7 +170,9 @@ export interface GenerationInput {
   language: Language | "auto";
   /** null = single-language script. */
   languageAlt: Language | null;
+  /** Epoch ms by which the whole request must finish; the generator stops early to meet it. */
+  deadline?: number;
 }
 
-/** Produces a draft from website content; implemented by OpenRouter or the mock. */
+/** Produces a draft from website content; implemented by Gemini or the mock. */
 export type DraftGenerator = (input: GenerationInput) => Promise<LlmDraft>;

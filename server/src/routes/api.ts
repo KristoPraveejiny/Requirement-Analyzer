@@ -45,6 +45,8 @@ export function createApiRouter({ config, fetchPage, generateDraft, mock, now = 
   });
 
   router.post("/generate", generateLimiter, upload, async (req, res) => {
+    // Overall budget (set on Netlify) so upload parsing + crawling + AI stay under the gateway limit.
+    const deadline = config.REQUEST_TIMEOUT_MS ? Date.now() + config.REQUEST_TIMEOUT_MS : undefined;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const mode = ModeSchema.safeParse(body.mode ?? "voice-agent");
     if (!mode.success) throw new AppError("INVALID_INPUT", "Mode must be \"voice-agent\" or \"voicemail\".");
@@ -61,7 +63,7 @@ export function createApiRouter({ config, fetchPage, generateDraft, mock, now = 
     const sample = req.file ? await extractUploadText(req.file) : undefined;
     const crawl = await crawlSite(url, fetchPage, { maxPages: config.MAX_PAGES });
 
-    const draft = await generateDraft({ mode: mode.data, websiteUrl: url, pages: crawl.pages, sample, ...langs });
+    const draft = await generateDraft({ mode: mode.data, websiteUrl: url, pages: crawl.pages, sample, ...langs, deadline });
     const document = assembleDocument(draft, {
       ...langs,
       mode: mode.data,

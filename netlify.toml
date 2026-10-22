@@ -18,7 +18,7 @@
   # server/package.json "dependencies".
   external_node_modules = [
     "cheerio", "docx", "express", "express-rate-limit", "helmet",
-    "mammoth", "multer", "undici", "unpdf", "zod",
+    "mammoth", "multer", "undici", "unpdf", "zod", "@google/genai",
   ]
 
 # Order matters: API first, then the single-page-app fallback.

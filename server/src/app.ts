@@ -7,8 +7,8 @@ import type { Config } from "./config.js";
 import { apiNotFound, errorHandler } from "./middleware/errors.js";
 import { createApiRouter } from "./routes/api.js";
 import { createSafeFetcher, type PageFetcher } from "./services/fetcher.js";
+import { createGeminiGenerator } from "./services/gemini.js";
 import { mockGenerator } from "./services/mockGenerator.js";
-import { createOpenRouterGenerator } from "./services/openrouter.js";
 import type { DraftGenerator } from "./types.js";
 
 export interface AppDeps {
@@ -27,13 +27,13 @@ export function createApp({ config, fetchPage, generateDraft, now }: AppDeps) {
   app.set("trust proxy", config.TRUST_PROXY);
   app.use(helmet());
 
-  const mock = !generateDraft && !config.OPENROUTER_API_KEY;
+  const mock = !generateDraft && !config.GEMINI_API_KEY;
   const generator =
     generateDraft ??
-    (config.OPENROUTER_API_KEY
-      ? createOpenRouterGenerator({
-          apiKey: config.OPENROUTER_API_KEY,
-          model: config.OPENROUTER_MODEL,
+    (config.GEMINI_API_KEY
+      ? createGeminiGenerator({
+          apiKey: config.GEMINI_API_KEY,
+          model: config.GEMINI_MODEL,
           timeoutMs: config.LLM_TIMEOUT_MS,
         })
       : mockGenerator);

@@ -106,6 +106,7 @@ describe("createOpenRouterGenerator", () => {
   it.each([
     [401, "LLM_AUTH"],
     [402, "LLM_CREDITS"],
+    [403, "LLM_FORBIDDEN"],
     [429, "LLM_RATE_LIMIT"],
     [500, "LLM_FAILED"],
   ])("maps HTTP %i to %s", async (status, code) => {
@@ -117,6 +118,38 @@ describe("createOpenRouterGenerator", () => {
     });
     await expect(gen(input)).rejects.toMatchObject({ code });
   });
+
+  it("logs status and provider message but never the API key", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gen = createOpenRouterGenerator({
+      apiKey: "sk-or-secret-value",
+      model: "m",
+      fetchImpl: mockFetch({ status: 401, body: { error: { message: "User not found." } } }),
+    });
+    await expect(gen(input)).rejects.toMatchObject({ code: "LLM_AUTH" });
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).toContain("User not found.");
+    expect(logged).toContain("401");
+    expect(logged).not.toContain("sk-or-secret-value");
+  });
+
+  it("maps an aborted AI request to LLM_TIMEOUT (HTTP 504)", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException("timed out", "TimeoutError");
+    }) as unknown as typeof fetch;
+    const gen = createOpenRouterGenerator({ apiKey: "k", model: "m", timeoutMs: 5_000, fetchImpl });
+    await expect(gen(input)).rejects.toMatchObject({ code: "LLM_TIMEOUT", status: 504 });
+  });
+
+  it("does not start a JSON retry once the shared deadline is nearly spent", async () => {
+    const fetchImpl = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 4_200));
+      return new Response(JSON.stringify(reply("not json").body));
+    }) as unknown as typeof fetch;
+    const gen = createOpenRouterGenerator({ apiKey: "k", model: "m", timeoutMs: 5_000, fetchImpl });
+    await expect(gen(input)).rejects.toMatchObject({ code: "LLM_TIMEOUT" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  }, 10_000);
 
   it("reports truncated output", async () => {
     const gen = createOpenRouterGenerator({ apiKey: "k", model: "m", fetchImpl: mockFetch(reply("{", "length")) });

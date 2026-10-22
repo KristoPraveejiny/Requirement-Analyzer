@@ -1,15 +1,26 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import handler from "../../netlify/functions/api.mjs";
+import handler, { netlifyEnv } from "../../netlify/functions/api.mjs";
 import { sampleDocument } from "./helpers.js";
 
 // Exercises the Netlify adapter end-to-end against the real Express app.
-// No OPENROUTER_API_KEY is set in tests, so the app runs in mock mode.
+// No GEMINI_API_KEY is set in tests, so the app runs in mock mode.
 const call = (path: string, init?: RequestInit, ip = "203.0.113.7") =>
   handler(new Request(`https://reqanalyze.netlify.app${path}`, init), { ip });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const json = async (r: Response) => (await r.json()) as any;
+
+describe("netlifyEnv", () => {
+  it("caps site variables at the gateway budget but allows lower values", () => {
+    const env = netlifyEnv({ MAX_PAGES: "8", LLM_TIMEOUT_MS: "180000", FETCH_TIMEOUT_MS: "2000", MAX_UPLOAD_MB: "5" });
+    expect(env).toMatchObject({ MAX_PAGES: "3", LLM_TIMEOUT_MS: "16000", FETCH_TIMEOUT_MS: "2000", MAX_UPLOAD_MB: "4", REQUEST_TIMEOUT_MS: "24000" });
+  });
+
+  it("falls back to the caps for missing or invalid values", () => {
+    expect(netlifyEnv({ LLM_TIMEOUT_MS: "abc" })).toMatchObject({ LLM_TIMEOUT_MS: "16000", MAX_PAGES: "3" });
+  });
+});
 
 describe("Netlify function adapter", () => {
   it("serves the API under both /api/* and the rewritten function path", async () => {

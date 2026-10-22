@@ -64,7 +64,15 @@ export function createOpenRouterGenerator(options: OpenRouterOptions): DraftGene
 
     if (!res.ok || body?.error) {
       // Provider messages are logged server-side only; callers get a generic message.
-      console.error("OpenRouter error", res.status, body?.error?.message);
+      // Never logs the key or request headers. A non-JSON body (e.g. an HTML block page
+      // from a proxy in front of OpenRouter) is logged as a short snippet instead.
+      console.error("OpenRouter error", {
+        status: res.status,
+        model,
+        contentType: res.headers.get("content-type"),
+        server: res.headers.get("server"),
+        message: body?.error?.message ?? (body ? undefined : text.slice(0, 200)),
+      });
       if (res.status === 401 || res.status === 403) {
         // Key shape only, never its value: helps spot a pasted "Bearer " prefix or quotes.
         console.error("OpenRouter key check", {
@@ -146,8 +154,10 @@ function parseJson(text: string): unknown {
 function mapStatus(status: number): AppError {
   switch (status) {
     case 401:
-    case 403:
       return new AppError("LLM_AUTH", "The AI service rejected the server's API key. Check the server configuration.", 502);
+    case 403:
+      // OpenRouter uses 403 for model/provider restrictions and moderation, not bad keys.
+      return new AppError("LLM_FORBIDDEN", "The AI service refused this request (model not permitted, or blocked). Check the server logs.", 502);
     case 402:
       return new AppError("LLM_CREDITS", "The AI service account has insufficient credits.", 502);
     case 429:

@@ -15,11 +15,11 @@ Requirements: Node.js 24+, npm 11+.
 
 ```bash
 npm install
-cp .env.example .env      # then set OPENROUTER_API_KEY locally (never commit .env)
+cp .env.example .env      # then set GEMINI_API_KEY locally (never commit .env)
 npm run dev               # API on http://localhost:8787, UI on http://localhost:5173
 ```
 
-If `OPENROUTER_API_KEY` is not set, the server runs in **mock mode**: the full flow (crawl, preview/edit, DOCX, Claude prompt) works, but the document is a clearly labelled skeleton instead of AI output.
+If `GEMINI_API_KEY` is not set, the server runs in **mock mode**: the full flow (crawl, preview/edit, DOCX, Claude prompt) works, but the document is a clearly labelled skeleton instead of AI output.
 
 | Script | What it does |
 | --- | --- |
@@ -35,8 +35,8 @@ See [.env.example](.env.example). All secrets stay on the server. The browser ne
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENROUTER_API_KEY` | (unset → mock mode) | OpenRouter API key |
-| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-5.5` | Any OpenRouter model slug; check the exact slug on openrouter.ai/models |
+| `GEMINI_API_KEY` | (unset → mock mode) | Google AI Studio API key for the Gemini API |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Any Gemini API model ID your key can use; see ai.google.dev/gemini-api/docs/models |
 | `PORT` | `8787` | HTTP port |
 | `MAX_UPLOAD_MB` | `5` | Sample upload size limit |
 | `MAX_PAGES` | `8` | Max website pages analysed (homepage + most relevant links) |
@@ -44,6 +44,7 @@ See [.env.example](.env.example). All secrets stay on the server. The browser ne
 | `TRUST_PROXY` | `false` | Set (e.g. `1`) behind a reverse proxy so rate limiting sees real client IPs |
 | `FETCH_TIMEOUT_MS` | `10000` | Per-page website fetch timeout |
 | `LLM_TIMEOUT_MS` | `180000` | AI request timeout |
+| `REQUEST_TIMEOUT_MS` | (unset) | Optional total budget for one `/api/generate` request; the AI call stops early to meet it |
 | `STATIC_DIR` | `client/dist` | Location of the built client |
 
 ## Usage
@@ -63,7 +64,7 @@ client/ (React + Vite + TS)                 server/ (Express 5 + TS)
                  └── /api/claude-prompt        ├─ services/extractor.ts Cheerio text + relevant-page crawl
                                                ├─ services/upload.ts   in-memory upload, signature check, parsing
                                                ├─ prompts/master.ts    PREDEFINED master prompt
-                                               ├─ services/openrouter.ts  LLM call, JSON validation, 1 retry
+                                               ├─ services/gemini.ts   Gemini call (@google/genai), JSON validation, 1 retry
                                                │  services/mockGenerator.ts (no key)
                                                ├─ services/document.ts assemble/normalise document
                                                ├─ services/docx.ts     DOCX rendering
@@ -115,12 +116,12 @@ Errors are always `{ error: { code, message } }` with a safe message. Stack trac
 
 ## Testing
 
-`npm test` runs 135 tests:
+`npm test` runs 174 tests:
 - **URL/SSRF policy:** private IP ranges, encoded IPs, and redirect chains, tested against a real local HTTP server.
 - **Fetching:** compression bombs, charsets, timeouts and size limits.
 - **Extraction and crawl ranking.**
 - **Upload validation:** real DOCX/PDF files, plus spoofed and corrupted files.
-- **LLM client:** mocked OpenRouter, covering retries and error mapping.
+- **LLM client:** mocked Gemini client, covering the JSON retry, deadlines and error mapping.
 - **Document assembly, DOCX output and API routes:** including rate limiting and safe error responses.
 
 To test the full flow manually without an API key, run `npm run build && npm start`, open http://localhost:8787, and generate a document for any public business website.
@@ -135,7 +136,7 @@ The app runs as **one Node process** that serves both the API and the built clie
 ```bash
 npm ci
 npm run build
-# set env vars (at least OPENROUTER_API_KEY) in the host's secret manager or a .env file
+# set env vars (at least GEMINI_API_KEY) in the host's secret manager or a .env file
 npm start            # listens on $PORT
 ```
 Put it behind HTTPS (e.g. Caddy or nginx) and set `TRUST_PROXY=1`.
@@ -143,12 +144,12 @@ Put it behind HTTPS (e.g. Caddy or nginx) and set `TRUST_PROXY=1`.
 **Docker:**
 ```bash
 docker build -t voice-agent-reqs .
-docker run -p 8787:8787 -e OPENROUTER_API_KEY=... -e TRUST_PROXY=1 voice-agent-reqs
+docker run -p 8787:8787 -e GEMINI_API_KEY=... -e TRUST_PROXY=1 voice-agent-reqs
 ```
 
 **Render / Railway / Fly.io:**
 - Build command: `npm ci && npm run build`. Start command: `npm start`.
-- Add `OPENROUTER_API_KEY` as a secret, and set `TRUST_PROXY=1`. These platforms provide `PORT`.
+- Add `GEMINI_API_KEY` as a secret, and set `TRUST_PROXY=1`. These platforms provide `PORT`.
 
 **Netlify (static client + API as a Netlify Function on the same site):**
 
@@ -159,12 +160,13 @@ Already configured in [netlify.toml](netlify.toml) and [netlify/functions/api.mt
 Netlify settings:
 - Leave **Base directory** empty. `netlify.toml` sets the build command (`npm run build`), the publish directory (`client/dist`) and the functions directory.
 - **Environment variables** (Site configuration → Environment variables, with scope including *Functions*):
-  - `OPENROUTER_API_KEY` (required)
-  - `OPENROUTER_MODEL`
+  - `GEMINI_API_KEY` (required; mark it as a secret). Create it in Google AI Studio → Get API key.
+  - `GEMINI_MODEL` (optional; defaults to `gemini-3.8-flash`)
+  - Redeploy after adding or changing variables. Function logs show `Gemini error` with the HTTP status (never the key) if the call fails.
 
 Netlify limits that apply ([docs](https://docs.netlify.com/build/functions/configuration/)):
-- **~26 s per request in practice.** Functions may run for 60 s, but Netlify's proxy returns a bare `HTTP 504` to the browser after about 26 s (10 s on some plans). The adapter defaults to `FETCH_TIMEOUT_MS=4000`, `MAX_PAGES=3` and `LLM_TIMEOUT_MS=16000` (one deadline shared with the JSON retry), so a slow generation ends with a clear "AI service took too long" error instead of a platform timeout.
-  - Generation only succeeds if the model answers within about 16 s. The free MiniMax model took about 130 s in testing, so **use a faster model on Netlify**, or host the API elsewhere (Render or Docker; see above).
+- **~26 s per request in practice.** Functions may run for 60 s, but Netlify's proxy returns a bare `HTTP 504` to the browser after about 26 s (10 s on some plans). The adapter defaults to `FETCH_TIMEOUT_MS=4000`, `MAX_PAGES=3` and `LLM_TIMEOUT_MS=16000` (one deadline shared with the JSON retry). `REQUEST_TIMEOUT_MS=24000` additionally caps the whole request, so slow upload parsing or crawling shortens the AI budget. These are also upper limits: site variables can lower them but not raise them, so a slow generation ends with a clear "AI service took too long" error instead of a platform timeout.
+  - Generation only succeeds if the model answers within about 16 s. Switching providers does not guarantee this: a full catalog is a long JSON response. If you still see `LLM_TIMEOUT`, try `GEMINI_MODEL=gemini-3.5-flash-lite` (faster, lower quality), fewer pages, or host the API elsewhere (Render or Docker; see above).
 - **6 MB request body,** with uploads Base64-encoded. The adapter defaults to `MAX_UPLOAD_MB=4`, and the UI reads this limit from `/api/health`.
 - **Rate limiting is per function instance,** in memory, so it is weaker than on a single server.
 - Any of these defaults can be overridden with site environment variables.
@@ -172,7 +174,7 @@ Netlify limits that apply ([docs](https://docs.netlify.com/build/functions/confi
 **Production checklist:**
 - HTTPS only.
 - Store the key in the platform's secret store, never in git.
-- Set a spending limit on the OpenRouter key.
+- Keep the Gemini key on the free tier, or set a budget/spend cap in Google AI Studio / Cloud billing if you enable billing. Free-tier requests may be used by Google to improve its products, so avoid sending confidential material.
 - Adjust `RATE_LIMIT_PER_MIN`.
 - Consider adding authentication, because the app is open to anyone who can reach it.
 - If the host has an internal network, also block outbound access to it at the network/firewall level, as defence in depth.
@@ -184,4 +186,4 @@ Netlify limits that apply ([docs](https://docs.netlify.com/build/functions/confi
 - **Parse timeout:** the upload parse timeout doesn't stop the parsing work already running. Very large DOCX files are limited only by the upload size cap. True isolation would need a worker thread with resource limits.
 - **Rate limiting** is in-memory, per process. Use a shared store (e.g. Redis) if you run multiple instances.
 - **No accounts or authentication:** documents are not stored on the server and exist only in the browser session.
-- **Output quality** depends on the chosen OpenRouter model. The model must follow JSON instructions well (Claude Sonnet-class models are recommended).
+- **Output quality** depends on the chosen Gemini model. Free-tier rate limits are low (requests per minute/day vary by model; see ai.google.dev/gemini-api/docs/rate-limits), and exceeding them returns a "rate-limiting" error.

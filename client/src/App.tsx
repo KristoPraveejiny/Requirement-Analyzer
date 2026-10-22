@@ -104,8 +104,8 @@ export default function App() {
 
       {health?.mock && (
         <div className="banner warn">
-          <strong>Mock mode:</strong> no OpenRouter API key is configured on the server, so documents are placeholder
-          skeletons. Set <code>OPENROUTER_API_KEY</code> in <code>.env</code> and restart the server.
+          <strong>Mock mode:</strong> no Gemini API key is configured on the server, so documents are placeholder
+          skeletons. Set <code>GEMINI_API_KEY</code> in <code>.env</code> and restart the server.
         </div>
       )}
       {error && (
