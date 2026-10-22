@@ -3,6 +3,8 @@ import { z } from "zod";
 const schema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.coerce.number().int().positive().default(8787),
+  // Bind all IPv4 interfaces so a hosting platform's proxy can reach the server.
+  HOST: z.string().trim().min(1).default("0.0.0.0"),
   // Empty string is treated as "not set" so a blank line in .env enables mock mode.
   GEMINI_API_KEY: z
     .string()
